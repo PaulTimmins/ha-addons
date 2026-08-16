@@ -1,0 +1,11 @@
+tests/
+systemd/
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+config.ini
+*.pid
+*.log
+README.md
+DOCS.md

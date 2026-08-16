@@ -1,0 +1,32 @@
+[Unit]
+Description=Lucky PV MPPT Device to Home Assistant MQTT bridge
+Documentation=https://github.com/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --foreground: let systemd own the process rather than double-forking.
+ExecStart=/usr/bin/python3 -m mppt run --foreground --config /etc/solar-mppt/config.ini
+WorkingDirectory=/opt/solar-mppt
+User=solar-mppt
+Group=solar-mppt
+
+# The vendor broker is somebody else's server and will drop connections.
+# paho reconnects internally; this covers the process dying outright.
+Restart=always
+RestartSec=10
+
+# Logs go to the journal: journalctl -u solar-mppt -f
+StandardOutput=journal
+StandardError=journal
+
+# The config file holds two sets of broker credentials.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/solar-mppt
+
+[Install]
+WantedBy=multi-user.target

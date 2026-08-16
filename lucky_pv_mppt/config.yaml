@@ -1,0 +1,77 @@
+# Home Assistant add-on manifest.
+#
+# NOTE: this is the *add-on* manifest that the Supervisor reads. It is not the
+# application's own config -- that is config.example.ini / config.ini. When
+# running as an add-on you configure it in the HA UI and the settings here are
+# rendered into a config.ini at startup.
+
+name: Lucky PV MPPT Device
+version: "1.0.0"
+slug: lucky_pv_mppt
+description: >-
+  Bridges a JGY / inverteriot MPPT solar charge controller into Home Assistant
+  via MQTT Discovery, with an Energy dashboard PV source.
+url: https://github.com/
+
+arch:
+  - aarch64
+  - amd64
+  - armv7
+
+# Long-running service, started by the Supervisor and restarted if it dies.
+startup: services
+boot: auto
+init: false
+
+# Pulls the Mosquitto host/credentials from the Supervisor so they do not have
+# to be typed in again. "want" rather than "need" so the add-on still starts if
+# you would rather point it at an external broker by hand below.
+services:
+  - mqtt:want
+
+options:
+  device_serial: ""
+  device_module_id: ""
+  device_name: Lucky PV MPPT
+  source_host: ""
+  source_port: 1883
+  source_username: ""
+  source_password: ""
+  source_topic: jgy/{module_id}/{serial}/device_state
+  mqtt_host: ""
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
+  discovery_prefix: homeassistant
+  retain: true
+  entity_id_charge_power: ""
+  entity_id_energy_today: ""
+  log_level: info
+
+schema:
+  # The hex string from your controller's MQTT topic.
+  device_serial: str
+  device_module_id: str
+  device_name: str
+
+  # The vendor's broker -- where the controller reports.
+  source_host: str
+  source_port: port
+  source_username: str?
+  source_password: password?
+  source_topic: str
+
+  # Your broker. Leave blank to use the Mosquitto add-on automatically.
+  mqtt_host: str?
+  mqtt_port: port?
+  mqtt_username: str?
+  mqtt_password: password?
+
+  discovery_prefix: str?
+  retain: bool?
+
+  # Optional: pin entity_ids to match an existing setup.
+  entity_id_charge_power: str?
+  entity_id_energy_today: str?
+
+  log_level: list(debug|info|warning|error)?

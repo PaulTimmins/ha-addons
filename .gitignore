@@ -1,0 +1,7 @@
+config.ini
+*.pid
+*.log
+__pycache__/
+*.py[cod]
+.venv/
+venv/
