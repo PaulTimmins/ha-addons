@@ -11,7 +11,7 @@ slug: lucky_pv_mppt
 description: >-
   Bridges a JGY / inverteriot MPPT solar charge controller into Home Assistant
   via MQTT Discovery, with an Energy dashboard PV source.
-url: https://github.com/
+url: https://github.com/PaulTimmins/ha-addons
 
 arch:
   - aarch64
