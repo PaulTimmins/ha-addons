@@ -1,0 +1,11 @@
+# Base image per architecture.
+#
+# Required: without this file the Supervisor passes no BUILD_FROM build-arg at
+# all, and `FROM ${BUILD_FROM}` fails with "base name should not be blank".
+# It does not fall back to a default.
+#
+# Tags verified present on ghcr.io for all three architectures.
+build_from:
+  amd64: ghcr.io/home-assistant/amd64-base:3.21
+  aarch64: ghcr.io/home-assistant/aarch64-base:3.21
+  armv7: ghcr.io/home-assistant/armv7-base:3.21

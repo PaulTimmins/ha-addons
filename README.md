@@ -55,6 +55,8 @@ loader, discovery payloads and outage handling are all exercised against fakes.
 repository.yaml        this repository's manifest, read by the Supervisor
 lucky_pv_mppt/         the add-on (each add-on needs its own directory)
   config.yaml          add-on manifest: options schema, version, services
+  build.yaml           base image per architecture (required: without it the
+                       Supervisor passes no BUILD_FROM and the build fails)
   Dockerfile           built on your machine at install time
   addon_bootstrap.py   renders the add-on options into config.ini, then execs
   DOCS.md              shown on the add-on's Documentation tab

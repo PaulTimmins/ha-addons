@@ -106,6 +106,11 @@ Neither broker going away stops the add-on; both links reconnect with backoff.
 
 ## Troubleshooting
 
+**The build fails with "base name should not be blank".** `build.yaml` is
+missing or its `build_from` has no entry for your architecture. The Supervisor
+only passes the `BUILD_FROM` build-arg when that file supplies one; there is no
+default.
+
 **Nothing appears in Home Assistant.** Check the MQTT integration is installed
 and that `discovery_prefix` matches its setting. The log will show
 "published discovery for 7 sensors" if the add-on's side succeeded.

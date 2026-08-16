@@ -1,18 +1,17 @@
 # Home Assistant add-on image.
 #
-# BUILD_FROM is supplied by the Supervisor and resolves to the right base image
-# for the machine's architecture.
-ARG BUILD_FROM
+# BUILD_FROM is supplied by the Supervisor from build.yaml. The default here is
+# only a safety net: with no build.yaml the Supervisor passes nothing, and a
+# bare `FROM ${BUILD_FROM}` fails the build with "base name should not be
+# blank" rather than falling back to anything.
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.21
 FROM ${BUILD_FROM}
 
-# Set as an env var rather than the --break-system-packages flag: pip older
-# than 23.0 does not know the flag and would fail the build, but ignores an
-# unrecognised env var.
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-
-# The HA base images are Alpine. python3 is not included in the plain base.
-RUN apk add --no-cache python3 py3-pip \
-    && python3 -m pip install --no-cache-dir 'paho-mqtt>=1.6,<3'
+# paho comes from Alpine's community repo rather than pip: it avoids PEP 668
+# externally-managed-environment handling entirely, needs no network beyond the
+# apk mirror, and pins to a version this project has been tested against
+# (1.6.1). python3 is not in the plain HA base image.
+RUN apk add --no-cache python3 py3-paho-mqtt
 
 WORKDIR /app
 COPY mppt/ /app/mppt/
