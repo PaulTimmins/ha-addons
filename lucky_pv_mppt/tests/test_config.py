@@ -154,15 +154,19 @@ class TestLoad(ConfigFileTestCase):
         self.assertEqual(str(load(path).path), path)
 
     def test_the_shipped_example_is_valid(self):
-        """The example must parse, and must not carry anyone's real details."""
+        """The example must parse and must carry no secrets.
+
+        The vendor host, username and module id are deliberately prefilled --
+        they are the same for every device on this service, so they are useful
+        defaults rather than anyone's private data. What must never appear is a
+        password or a real serial: the serial identifies one physical unit.
+        """
         example = Path(__file__).resolve().parent.parent / "config.example.ini"
         config = load(str(example))
         self.assertTrue(config.source.topic.endswith("/device_state"))
-        self.assertIsNone(config.source.password)
-        self.assertIsNone(config.homeassistant.password)
-        text = example.read_text()
-        for secret in ("inverteriot", "device_client", "4CEBD683EEC0", "wifi20220903"):
-            self.assertNotIn(secret, text)
+        self.assertIsNone(config.source.password, "no source password in the example")
+        self.assertIsNone(config.homeassistant.password, "no HA password either")
+        self.assertEqual(config.device.serial, "AABBCCDDEEFF", "placeholder serial")
 
 
 class TestHomeAssistantOptional(ConfigFileTestCase):

@@ -29,13 +29,16 @@ init: false
 services:
   - mqtt:want
 
+# Defaults are prefilled for the Lucky PV / inverteriot service, which shares
+# them across every device of this model. Normally only device_serial and
+# source_password need filling in.
 options:
   device_serial: ""
-  device_module_id: ""
+  device_module_id: wifi20220903
   device_name: Lucky PV MPPT
-  source_host: ""
+  source_host: usadev.inverteriot.com
   source_port: 1883
-  source_username: ""
+  source_username: device_client
   source_password: ""
   source_topic: jgy/{module_id}/{serial}/device_state
   mqtt_host: ""
