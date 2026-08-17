@@ -22,6 +22,13 @@ OPTIONS_PATH = "/data/options.json"
 CONFIG_PATH = "/data/config.ini"
 SUPERVISOR_MQTT_URL = "http://supervisor/services/mqtt"
 
+#: Renamed across Supervisor versions; try each in order.
+TOKEN_ENV_VARS = ("SUPERVISOR_TOKEN", "HASSIO_TOKEN")
+
+#: Where the Mosquitto add-on listens on the Supervisor's internal network.
+#: Used only to tell the user what to type, never assumed to be reachable.
+MOSQUITTO_INTERNAL_HOST = "core-mosquitto"
+
 
 def read_options(path: str = OPTIONS_PATH) -> dict:
     try:
@@ -36,26 +43,71 @@ def read_options(path: str = OPTIONS_PATH) -> dict:
 def discover_mqtt(token: str = None) -> dict:
     """Ask the Supervisor for the Mosquitto connection details.
 
-    Returns {} if the service is not available -- the add-on declares
-    ``mqtt:want``, so running without it is legitimate.
+    Returns {} if they cannot be obtained -- the add-on declares ``mqtt:want``,
+    so running against a hand-configured broker is legitimate.
+
+    Every failure path says why. An earlier version returned {} silently when
+    the token was missing or the API said something unexpected, which made a
+    failure here indistinguishable from "no broker installed".
     """
-    token = token or os.environ.get("SUPERVISOR_TOKEN")
+    token = token or _supervisor_token()
     if not token:
+        print(
+            "warning: no Supervisor token in the environment (looked for "
+            f"{', '.join(TOKEN_ENV_VARS)}); cannot ask for Mosquitto details"
+        )
         return {}
 
+    # Newer Supervisors want X-Supervisor-Token; older ones take an
+    # Authorization bearer. Sending both satisfies either without a version
+    # check, and neither rejects the presence of the other.
     request = urllib.request.Request(
-        SUPERVISOR_MQTT_URL, headers={"Authorization": f"Bearer {token}"}
+        SUPERVISOR_MQTT_URL,
+        headers={
+            "X-Supervisor-Token": token,
+            "Authorization": f"Bearer {token}",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=10) as response:
             body = json.load(response)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", "replace")[:300]
+        except Exception:  # noqa: BLE001 - diagnostics must not mask the error
+            pass
+        print(
+            f"warning: Supervisor returned HTTP {exc.code} for "
+            f"{SUPERVISOR_MQTT_URL}: {detail or exc.reason}"
+        )
+        return {}
     except (urllib.error.URLError, json.JSONDecodeError, OSError) as exc:
         print(f"warning: could not reach the Supervisor MQTT service: {exc}")
         return {}
 
     if body.get("result") != "ok":
+        print(f"warning: Supervisor MQTT service replied: {str(body)[:300]}")
         return {}
-    return body.get("data") or {}
+
+    data = body.get("data") or {}
+    if not data.get("host"):
+        print(
+            "warning: the Supervisor knows of no MQTT service. Is the "
+            "Mosquitto broker add-on installed and started? "
+            f"Reply was: {str(body)[:300]}"
+        )
+        return {}
+    return data
+
+
+def _supervisor_token() -> str:
+    """The token env var has been renamed across Supervisor versions."""
+    for name in TOKEN_ENV_VARS:
+        value = os.environ.get(name)
+        if value:
+            return value
+    return ""
 
 
 def _ini_escape(value: str) -> str:
@@ -87,8 +139,15 @@ def build_config(options: dict, mqtt_service: dict) -> str:
 
     if not mqtt_host:
         sys.exit(
-            "error: no MQTT broker. Either install the Mosquitto add-on, or "
-            "set mqtt_host in the add-on configuration."
+            "error: could not determine your MQTT broker automatically "
+            "(see the warning above for why).\n"
+            "  Fix it by filling these in on the add-on's Configuration tab:\n"
+            f"    mqtt_host     = {MOSQUITTO_INTERNAL_HOST}   "
+            "(if you use the Mosquitto add-on; otherwise your broker's IP)\n"
+            "    mqtt_port     = 1883\n"
+            "    mqtt_username = a Home Assistant user, or a Mosquitto login\n"
+            "    mqtt_password = that user's password\n"
+            "  Auto-detection is a convenience; setting these works just as well."
         )
 
     lines = [

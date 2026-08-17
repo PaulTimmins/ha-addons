@@ -6,7 +6,7 @@
 # rendered into a config.ini at startup.
 
 name: Lucky PV MPPT Device
-version: "1.0.2"
+version: "1.0.3"
 slug: lucky_pv_mppt
 description: >-
   Bridges a JGY / inverteriot MPPT solar charge controller into Home Assistant
@@ -28,6 +28,11 @@ init: false
 # you would rather point it at an external broker by hand below.
 services:
   - mqtt:want
+
+# The service lookup is a call to the Supervisor's own API, so the add-on needs
+# permission to talk to it. Without this the request can be refused, which
+# looks identical to "no broker installed".
+hassio_api: true
 
 # Everything except device_serial and source_password is a working default for
 # the Lucky PV / inverteriot service -- these values are shared across every

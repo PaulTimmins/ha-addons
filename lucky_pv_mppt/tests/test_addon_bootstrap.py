@@ -194,13 +194,137 @@ class TestOptionsReading(unittest.TestCase):
 
 
 class TestDiscoverMqtt(unittest.TestCase):
-    def test_no_supervisor_token_returns_empty(self):
-        saved = os.environ.pop("SUPERVISOR_TOKEN", None)
+    """Auto-detection must never fail silently.
+
+    The first version returned {} with no output when the token was missing or
+    the API said something unexpected, so a broken lookup was indistinguishable
+    from "no broker installed" -- which is exactly how it failed in the field.
+    """
+
+    def setUp(self):
+        self.saved = {k: os.environ.pop(k, None) for k in addon_bootstrap.TOKEN_ENV_VARS}
+
+    def tearDown(self):
+        for key, value in self.saved.items():
+            if value is not None:
+                os.environ[key] = value
+            else:
+                os.environ.pop(key, None)
+
+    def capture(self, fn):
+        import contextlib
+        import io
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            result = fn()
+        return result, buf.getvalue()
+
+    def test_missing_token_says_so(self):
+        result, out = self.capture(addon_bootstrap.discover_mqtt)
+        self.assertEqual(result, {})
+        self.assertIn("warning", out.lower())
+        self.assertIn("SUPERVISOR_TOKEN", out)
+
+    def test_legacy_token_env_var_is_accepted(self):
+        os.environ["HASSIO_TOKEN"] = "legacy-token"
+        self.assertEqual(addon_bootstrap._supervisor_token(), "legacy-token")
+
+    def test_current_token_env_var_wins(self):
+        os.environ["HASSIO_TOKEN"] = "legacy"
+        os.environ["SUPERVISOR_TOKEN"] = "current"
+        self.assertEqual(addon_bootstrap._supervisor_token(), "current")
+
+    def test_unreachable_supervisor_says_so(self):
+        def boom(*a, **kw):
+            raise OSError("connection refused")
+
+        original = addon_bootstrap.urllib.request.urlopen
+        addon_bootstrap.urllib.request.urlopen = boom
         try:
-            self.assertEqual(addon_bootstrap.discover_mqtt(), {})
+            result, out = self.capture(
+                lambda: addon_bootstrap.discover_mqtt(token="t")
+            )
         finally:
-            if saved is not None:
-                os.environ["SUPERVISOR_TOKEN"] = saved
+            addon_bootstrap.urllib.request.urlopen = original
+        self.assertEqual(result, {})
+        self.assertIn("connection refused", out)
+
+    def test_reply_without_a_host_says_so(self):
+        """A running Supervisor with no MQTT service must not look like a crash."""
+        result, out = self.capture(
+            lambda: self._with_reply({"result": "ok", "data": {}}, token="t")
+        )
+        self.assertEqual(result, {})
+        self.assertIn("Mosquitto", out)
+
+    def test_error_reply_is_printed(self):
+        result, out = self.capture(
+            lambda: self._with_reply(
+                {"result": "error", "message": "service not enabled"}, token="t"
+            )
+        )
+        self.assertEqual(result, {})
+        self.assertIn("service not enabled", out)
+
+    def test_successful_reply_is_returned(self):
+        data = {"host": "core-mosquitto", "port": 1883,
+                "username": "addons", "password": "pw"}
+        result, out = self.capture(
+            lambda: self._with_reply({"result": "ok", "data": data}, token="t")
+        )
+        self.assertEqual(result, data)
+        self.assertEqual(out, "", "a successful lookup should be quiet")
+
+    def test_both_auth_headers_are_sent(self):
+        """Newer Supervisors want X-Supervisor-Token, older ones the bearer."""
+        seen = {}
+
+        class FakeResponse:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            def read(self_):
+                return json.dumps(
+                    {"result": "ok", "data": {"host": "h", "port": 1883}}
+                ).encode()
+
+        def fake_urlopen(request, timeout=None):
+            seen.update(request.headers)
+            return FakeResponse()
+
+        original = addon_bootstrap.urllib.request.urlopen
+        addon_bootstrap.urllib.request.urlopen = fake_urlopen
+        try:
+            addon_bootstrap.discover_mqtt(token="tok")
+        finally:
+            addon_bootstrap.urllib.request.urlopen = original
+
+        # urllib capitalises header names.
+        lowered = {k.lower(): v for k, v in seen.items()}
+        self.assertEqual(lowered.get("X-supervisor-token".lower()), "tok")
+        self.assertEqual(lowered.get("authorization"), "Bearer tok")
+
+    def _with_reply(self, body, token):
+        class FakeResponse:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            def read(self_):
+                return json.dumps(body).encode()
+
+        original = addon_bootstrap.urllib.request.urlopen
+        addon_bootstrap.urllib.request.urlopen = lambda *a, **kw: FakeResponse()
+        try:
+            return addon_bootstrap.discover_mqtt(token=token)
+        finally:
+            addon_bootstrap.urllib.request.urlopen = original
 
 
 class TestPermissions(unittest.TestCase):
