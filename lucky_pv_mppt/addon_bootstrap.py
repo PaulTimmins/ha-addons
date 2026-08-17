@@ -204,14 +204,25 @@ def write_config(text: str, path: str = CONFIG_PATH) -> None:
 
 def main() -> None:
     options = read_options()
-    mqtt_service = {}
-    if not (options.get("mqtt_host") or "").strip():
-        mqtt_service = discover_mqtt()
-        if mqtt_service.get("host"):
-            print(
-                "using the Mosquitto add-on at "
-                f"{mqtt_service['host']}:{mqtt_service.get('port', 1883)}"
-            )
+
+    # Always ask, and let each field fall back on its own. Gating the whole
+    # lookup on a blank mqtt_host meant that setting just the host -- the
+    # obvious thing to do -- silently threw away the discovered credentials
+    # and produced an anonymous connect the broker refused.
+    mqtt_service = discover_mqtt()
+    if mqtt_service.get("host"):
+        print(
+            "found the Mosquitto add-on at "
+            f"{mqtt_service['host']}:{mqtt_service.get('port', 1883)}"
+        )
+
+    for field, label in (
+        ("mqtt_host", "host"),
+        ("mqtt_username", "username"),
+        ("mqtt_password", "password"),
+    ):
+        if (options.get(field) or "").strip():
+            print(f"using the configured MQTT {label} instead of the discovered one")
 
     write_config(build_config(options, mqtt_service))
     print(f"wrote {CONFIG_PATH}, starting bridge")

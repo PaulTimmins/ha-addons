@@ -46,11 +46,16 @@ FUNCTION_CODE = 0xB3
 #: is how the remaining fields will get identified.
 _UNKNOWN_U16_OFFSETS = (2, 4, 14, 16, 18, 20, 28, 30, 32, 34)
 
+#: Unidentified fields that are known to *change* during normal operation, so
+#: movement in them is not worth reporting. Offset 4 is the clear case: its
+#: high byte reads 0x0D while charging hard, 0x09 or 0x00 idle overnight, which
+#: makes it look like a charge-state or status field.
+VARYING_UNKNOWNS = {"u16@4"}
+
 #: What each unknown field has read in every frame seen so far. Used only to
 #: flag movement for logging; a value that differs is never an error.
 BASELINE_UNKNOWNS = {
     "u16@2": 0x0100,
-    "u16@4": 0x0D02,
     "u16@14": 0x0000,
     "u16@16": 0x10C8,
     "u16@18": 0x0000,
@@ -116,7 +121,7 @@ class MPPTFrame:
         return {
             key: value
             for key, value in self.unknown.items()
-            if BASELINE_UNKNOWNS.get(key) != value
+            if key not in VARYING_UNKNOWNS and BASELINE_UNKNOWNS.get(key) != value
         }
 
     @property
@@ -155,6 +160,25 @@ def checksum(data: bytes) -> int:
     return sum(data) & 0xFF
 
 
+def _hex_text_to_bytes(raw: bytes):
+    """Decode a payload that is ASCII hex *text* rather than binary.
+
+    The controller publishes the frame as 74 characters of hex rather than 37
+    raw bytes, so an MQTT payload arrives as b"01B301..." not b"\\x01\\xb3...".
+    Returns None if it does not look like hex text.
+    """
+    try:
+        text = raw.decode("ascii").strip()
+    except UnicodeDecodeError:
+        return None
+    if not text or len(text) % 2:
+        return None
+    try:
+        return bytes.fromhex(text)
+    except ValueError:
+        return None
+
+
 def _coerce(payload: Union[bytes, bytearray, memoryview, str]) -> bytes:
     if isinstance(payload, str):
         text = "".join(payload.split())
@@ -162,10 +186,18 @@ def _coerce(payload: Union[bytes, bytearray, memoryview, str]) -> bytes:
             return bytes.fromhex(text)
         except ValueError as exc:
             raise FrameError(f"payload is not valid hex: {payload!r}") from exc
-    if isinstance(payload, (bytearray, memoryview)):
-        return bytes(payload)
-    if isinstance(payload, bytes):
-        return payload
+
+    if isinstance(payload, (bytes, bytearray, memoryview)):
+        raw = bytes(payload)
+        # Binary of the right length wins: a real frame contains bytes like
+        # 0x01 and 0xB3 that are not hex characters, so there is no ambiguity.
+        if len(raw) == FRAME_LENGTH:
+            return raw
+        decoded = _hex_text_to_bytes(raw)
+        if decoded is not None:
+            return decoded
+        return raw  # let the length/checksum checks report it
+
     raise FrameError(f"unsupported payload type: {type(payload).__name__}")
 
 

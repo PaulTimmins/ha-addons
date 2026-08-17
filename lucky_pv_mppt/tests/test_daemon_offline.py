@@ -270,6 +270,34 @@ class TestSourceBrokerOffline(BridgeTestCase):
         self.assertTrue(self.bridge._sink_ready.is_set(), "HA link stays up")
 
 
+class TestLivePayloadFormat(BridgeTestCase):
+    """End to end with a payload in the form the device actually publishes."""
+
+    #: 74 bytes of ASCII hex, as captured off the broker.
+    AS_PUBLISHED = (
+        b"01B301000902023E13940001011F000010C8000000000B7C0021C00B000000000000000013"
+    )
+
+    def test_hex_text_payload_publishes_state(self):
+        self.connect_sink()
+        self.bridge._on_message(
+            None, None, SimpleNamespace(payload=self.AS_PUBLISHED)
+        )
+        self.assertEqual(self.bridge.frames_rejected, 0)
+        published = self.state_messages()
+        self.assertEqual(len(published), 1)
+        payload = json.loads(published[0][0])
+        self.assertEqual(payload["battery_voltage"], 50.12)
+        self.assertEqual(payload["energy_total"], 2211.851)
+
+    def test_status_byte_movement_is_not_logged_as_novel(self):
+        self.connect_sink()
+        self.bridge._on_message(
+            None, None, SimpleNamespace(payload=self.AS_PUBLISHED)
+        )
+        self.assertEqual(self.bridge._reported_unknowns, set())
+
+
 class TestBadFrames(BridgeTestCase):
     def test_corrupt_frame_is_skipped_not_fatal(self):
         self.connect_sink()

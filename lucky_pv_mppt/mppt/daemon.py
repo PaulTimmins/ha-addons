@@ -157,6 +157,14 @@ class Bridge:
             # paho keep backing off rather than exiting: the broker may simply
             # not be up yet during a boot.
             log.error("HA broker refused connection: %s", _rc_text(rc))
+            if rc in (4, 5):
+                ha = self.config.homeassistant
+                log.error(
+                    "  credentials were %s. Either leave the MQTT username and "
+                    "password blank so the Mosquitto add-on's own credentials "
+                    "are used, or set them to a valid Home Assistant user.",
+                    f"username '{ha.username}'" if ha.username else "not supplied",
+                )
             return
 
         log.info("connected to HA broker")

@@ -94,6 +94,17 @@ class TestMosquittoDiscovery(BootstrapTestCase):
         self.assertEqual(config.homeassistant.username, "addons")
         self.assertEqual(config.homeassistant.password, "s3cret")
 
+    def test_setting_only_the_host_keeps_the_discovered_credentials(self):
+        """The regression that caused 'not authorised' in the field.
+
+        Setting mqtt_host by hand must not throw away the discovered username
+        and password -- that produced an anonymous connect the broker refused.
+        """
+        _, config = self.render({"mqtt_host": "core-mosquitto"}, service=MOSQUITTO)
+        self.assertEqual(config.homeassistant.host, "core-mosquitto")
+        self.assertEqual(config.homeassistant.username, "addons")
+        self.assertEqual(config.homeassistant.password, "s3cret")
+
     def test_explicit_host_wins_over_the_supervisor(self):
         _, config = self.render(
             {"mqtt_host": "192.0.2.50", "mqtt_username": "me", "mqtt_password": "mine"},

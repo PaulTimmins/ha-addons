@@ -236,19 +236,26 @@ entity just never shows up in the Energy dashboard.
 
 ## Protocol
 
-Topic `jgy/<wifi-module-id>/<device-serial>/device_state`, payload 37 bytes,
-big-endian, Modbus-flavoured but with a vendor function code and a one-byte
-checksum rather than a CRC16.
+Topic `jgy/<wifi-module-id>/<device-serial>/device_state`. The frame is 37
+bytes, big-endian, Modbus-flavoured but with a vendor function code and a
+one-byte checksum rather than a CRC16.
+
+**It is published as ASCII hex text, not binary** — an MQTT payload is 74
+characters, `b"01B301..."` rather than `b"\x01\xb3..."`. `parse()` accepts
+either: a 37-byte payload is taken as binary, anything else that decodes as
+hex text is decoded first.
 
 | Offset | Size | Field | Scale | Notes |
 |---|---|---|---|---|
 | 0 | 1 | device address | | `0x01`, validated |
 | 1 | 1 | function code | | `0xB3` vendor-specific, validated |
-| 2–5 | 4 | *unknown* | | so far `01 00 0D 02` |
+| 2–3 | u16 | *unknown* | | so far `01 00` |
+| 4 | u8 | *status / charge state* | | varies: `0x0D` charging hard, `0x09`/`0x00` idle |
+| 5 | u8 | *unknown* | | so far `02` |
 | 6–7 | u16 | PV array voltage | ×0.1 V | |
 | 8–9 | u16 | battery voltage | ×0.01 V | |
 | 10–11 | u16 | charge current | ×0.01 A | |
-| 12–13 | u16 | temperature | ×0.1 °C | **tentative**, see below |
+| 12–13 | u16 | temperature | ×0.1 °C | confirmed against overnight data |
 | 14–15 | u16 | *unknown* | | so far 0 |
 | 16–17 | u16 | *unknown* | | so far `0x10C8` |
 | 18–21 | u32 | *unknown* | | so far 0 |
@@ -289,15 +296,19 @@ observed ground truth rather than to guesswork.
 
 ### Open questions
 
-- **Offset 12–13** reads 326–328 across the samples and tracks charge current
-  slightly upward, which is what a controller heatsink does. 32.6–32.8 °C is
-  plausible for a unit under load. Confident enough to expose, not confident
-  enough to call settled — confirm by watching it overnight, when it should
-  fall toward ambient as the array stops producing.
+- ~~**Offset 12–13** is temperature~~ — **confirmed**. It read 32.6–32.8 °C
+  under load in daylight and 28.6–28.7 °C overnight with the array idle,
+  falling toward ambient exactly as a heatsink reading should.
 - **Offset 16–17** is a constant `0x10C8`. Could be two bytes (16 and 200 — a
   16-cell LiFePO4 bank at 200 Ah fits a 50.47 V battery at 3.15 V/cell), or one
   value (4296 → a 42.96 V low-voltage cutoff, 2.69 V/cell, also plausible).
   Changing a battery setting in the app and re-capturing would settle it.
+- **Offset 4** is a status or charge-state byte, not part of a fixed header as
+  first assumed. It reads `0x0D` while charging hard, and `0x09` or `0x00` when
+  idle overnight. The exact encoding is unknown, so it is carried but not
+  exposed as a sensor. Because it moves in normal operation it is listed in
+  `VARYING_UNKNOWNS` and excluded from change reporting, which would otherwise
+  be constant noise.
 - The **all-zero fields** are likely load output current/power and fault or
   status flags on a controller with nothing connected to the load terminals.
 

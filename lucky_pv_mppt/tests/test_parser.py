@@ -149,6 +149,89 @@ class TestToleratesNewValues(unittest.TestCase):
         self.assertNotEqual(frame.changed_unknowns(), {})
 
 
+#: Captured live off the broker at night. The controller publishes the frame as
+#: ASCII hex *text*, so an MQTT payload is b"01B301..." not b"\x01\xb3...".
+#: Byte 4 also differs from the daytime captures, which is what revealed it as a
+#: live status field rather than part of a fixed header.
+NIGHT_FRAMES_AS_PUBLISHED = [
+    b"01B301000902023E13940001011F000010C8000000000B7C0021C00B000000000000000013",
+    b"01B301000002023613940002011F000010C8000000000B7C0021C00B000000000000000003",
+    b"01B301000902024613940001011F000010C8000000000B7C0021C00B00000000000000001B",
+    b"01B301000002023413940002011E000010C8000000000B7C0021C00B000000000000000000",
+    b"01B301000902025B13940001011F000010C8000000000B7C0021C00B000000000000000030",
+]
+
+
+class TestHexTextPayloads(unittest.TestCase):
+    """The device publishes hex text, not binary.
+
+    A 37-byte frame arrives as a 74-byte ASCII payload. Treating it as binary
+    fails the length check, which is how every live frame was rejected.
+    """
+
+    def test_payloads_as_published_parse(self):
+        for payload in NIGHT_FRAMES_AS_PUBLISHED:
+            with self.subTest(payload=payload[:16]):
+                self.assertEqual(len(payload), 74)
+                parse(payload)
+
+    def test_hex_text_and_binary_agree(self):
+        for payload in NIGHT_FRAMES_AS_PUBLISHED:
+            with self.subTest(payload=payload[:16]):
+                binary = bytes.fromhex(payload.decode())
+                self.assertEqual(parse(payload).to_dict(), parse(binary).to_dict())
+
+    def test_binary_is_preferred_when_length_matches(self):
+        """A real 37-byte frame must never be reinterpreted as text."""
+        binary = bytes.fromhex(SCREENSHOT_FRAME)
+        self.assertEqual(parse(binary).raw, binary)
+
+    def test_lowercase_hex_text_works(self):
+        payload = NIGHT_FRAMES_AS_PUBLISHED[0].lower()
+        self.assertEqual(parse(payload).battery_voltage, 50.12)
+
+    def test_trailing_whitespace_is_tolerated(self):
+        payload = NIGHT_FRAMES_AS_PUBLISHED[0] + b"\r\n"
+        self.assertEqual(parse(payload).battery_voltage, 50.12)
+
+    def test_night_values_are_plausible(self):
+        """Dark: open-circuit PV, no meaningful current, cooler than daytime."""
+        for payload in NIGHT_FRAMES_AS_PUBLISHED:
+            with self.subTest(payload=payload[:16]):
+                f = parse(payload)
+                self.assertEqual(f.battery_voltage, 50.12)
+                self.assertLess(f.charge_current, 0.1)
+                self.assertLess(f.temperature, 30.0)
+
+    def test_temperature_falls_overnight(self):
+        """Confirms offset 12-13 is temperature: it tracks ambient, not load."""
+        day = parse(SCREENSHOT_FRAME).temperature
+        night = parse(NIGHT_FRAMES_AS_PUBLISHED[0]).temperature
+        self.assertGreater(day, night)
+        self.assertAlmostEqual(day, 32.6, places=1)
+        self.assertAlmostEqual(night, 28.7, places=1)
+
+    def test_energy_only_moves_forward(self):
+        """Night totals must exceed the earlier daytime capture."""
+        day = parse(SCREENSHOT_FRAME)
+        night = parse(NIGHT_FRAMES_AS_PUBLISHED[0])
+        self.assertGreater(night.energy_total, day.energy_total)
+        self.assertEqual(
+            night.energy_total - day.energy_total,
+            night.energy_today - day.energy_today,
+        )
+
+    def test_varying_status_byte_is_not_reported_as_a_change(self):
+        """Offset 4 moves with charge state; alerting on it would be noise."""
+        for payload in NIGHT_FRAMES_AS_PUBLISHED:
+            with self.subTest(payload=payload[:16]):
+                self.assertEqual(parse(payload).changed_unknowns(), {})
+
+    def test_varying_status_byte_is_still_carried(self):
+        values = {parse(p).unknown["u16@4"] for p in NIGHT_FRAMES_AS_PUBLISHED}
+        self.assertEqual(values, {0x0902, 0x0002})
+
+
 class TestInputForms(unittest.TestCase):
     def test_bytes_and_hex_agree(self):
         as_hex = parse(SCREENSHOT_FRAME)
