@@ -6,7 +6,7 @@
 # rendered into a config.ini at startup.
 
 name: Lucky PV MPPT Device
-version: "1.0.1"
+version: "1.0.2"
 slug: lucky_pv_mppt
 description: >-
   Bridges a JGY / inverteriot MPPT solar charge controller into Home Assistant
@@ -29,9 +29,17 @@ init: false
 services:
   - mqtt:want
 
-# Defaults are prefilled for the Lucky PV / inverteriot service, which shares
-# them across every device of this model. Normally only device_serial and
-# source_password need filling in.
+# Everything except device_serial and source_password is a working default for
+# the Lucky PV / inverteriot service -- these values are shared across every
+# device of this model, so most people only fill in two fields. They stay
+# editable in case the vendor ever changes them.
+#
+# The two you need:
+#   device_serial   -- the hex string unique to your unit (see DOCS.md).
+#   source_password -- the vendor broker password. It is the same for every
+#                      device. Get it by emailing paul@timmins.net, or sniff it
+#                      yourself: it crosses the wire in cleartext to
+#                      usadev.inverteriot.com:1883 (MQTT CONNECT packet).
 options:
   device_serial: ""
   device_module_id: wifi20220903

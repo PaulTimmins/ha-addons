@@ -33,24 +33,41 @@ Note this route has no update mechanism — you replace the files and rebuild.
 
 ## Configuration
 
-| Option | What it is |
-|---|---|
-| `device_serial` | The hex string in your controller's MQTT topic. Home Assistant keys every entity's `unique_id` on this, so changing it later orphans the entities and their history. |
-| `device_module_id` | The wifi module id — the topic segment before the serial. |
-| `device_name` | Device name shown in Home Assistant. |
-| `source_host` | The **vendor's** broker, where the controller reports. |
-| `source_port` | Usually 1883. |
-| `source_username` / `source_password` | Credentials for the vendor's broker. |
-| `source_topic` | `{serial}` and `{module_id}` are substituted in. |
-| `mqtt_host` … `mqtt_password` | **Leave blank.** The add-on asks the Supervisor for your Mosquitto details automatically. Only fill these in to use a different broker. |
-| `discovery_prefix` | Must match the MQTT integration's setting. `homeassistant` unless you changed it. |
-| `retain` | Keep on, so a restart restores the last reading immediately instead of waiting for the controller's next report. |
-| `entity_id_charge_power` | Optional. Pins the entity_id, e.g. `solarinverterwatts` → `sensor.solarinverterwatts`. |
-| `entity_id_energy_today` | Optional, same idea. |
-| `log_level` | `debug` shows every raw frame. |
+**You only need to set two fields.** Everything else is a working default for
+this hardware, shared across every device on the service:
 
-Start the add-on and watch the **Log** tab. You should see it connect to both
-brokers, publish discovery for seven sensors, then a line per frame.
+- **`device_serial`** — the hex string unique to your unit (see below).
+- **`source_password`** — the vendor broker password (see below).
+
+Leave the rest as-is unless the vendor changes something. The
+`mqtt_*` fields in particular should stay blank: the add-on pulls your
+Mosquitto host and credentials from the Supervisor automatically. Every field
+has help text under it in the UI.
+
+### Finding your device serial
+
+It is the second-to-last segment of the controller's MQTT topic —
+`jgy/<module>/<SERIAL>/device_state`. If you have used the vendor app, it is
+the device id shown there. Twelve hex characters, e.g. `4CEBD683EEC0`.
+
+### Getting the vendor broker password
+
+The vendor uses one shared password for every device, next to a generic
+`device_client` username — the broker login is a shared pipe, not per-device
+authentication. Two ways to get it:
+
+- **Email paul@timmins.net** and ask for it.
+- **Sniff it yourself.** It is sent in cleartext in the MQTT CONNECT packet.
+  Point Wireshark at traffic to `usadev.inverteriot.com` port `1883` (from a
+  phone running the vendor app, or the controller itself) and read the
+  username and password straight out of the CONNECT packet. No TLS is used.
+
+It is not derived from your serial, so there is nothing to compute — it is the
+same string for everyone.
+
+Once both fields are set, start the add-on and watch the **Log** tab. You
+should see it connect to both brokers, publish discovery for seven sensors,
+then a line per frame.
 
 ## Setting up the Energy dashboard
 

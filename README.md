@@ -59,6 +59,7 @@ lucky_pv_mppt/         the add-on (each add-on needs its own directory)
                        Supervisor passes no BUILD_FROM and the build fails)
   Dockerfile           built on your machine at install time
   addon_bootstrap.py   renders the add-on options into config.ini, then execs
+  translations/        per-field labels and help text for the add-on UI
   DOCS.md              shown on the add-on's Documentation tab
   mppt/                the application
   tests/

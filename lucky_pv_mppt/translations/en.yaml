@@ -1,0 +1,76 @@
+# Per-field labels and help text shown under each option in the add-on UI.
+# The keys must match the option keys in config.yaml.
+configuration:
+  device_serial:
+    name: Device serial
+    description: >-
+      The hex string unique to your controller (e.g. 4CEBD683EEC0). It is the
+      last-but-one segment of its MQTT topic and the only value tied to your
+      physical unit. Home Assistant keys every entity on it, so do not change
+      it after setup.
+  source_password:
+    name: Vendor broker password
+    description: >-
+      The password for the vendor's MQTT broker. It is the same for every
+      device on this service. Email paul@timmins.net to get it, or sniff it
+      yourself -- it is sent in cleartext in the MQTT CONNECT packet to
+      usadev.inverteriot.com:1883.
+  device_module_id:
+    name: Wi-Fi module id
+    description: >-
+      Shared across all devices of this model. The default is correct unless
+      the vendor introduces a new module generation.
+  device_name:
+    name: Device name
+    description: The name shown for the device in Home Assistant.
+  source_host:
+    name: Vendor broker host
+    description: The vendor's MQTT broker. Default is correct for this service.
+  source_port:
+    name: Vendor broker port
+    description: Usually 1883.
+  source_username:
+    name: Vendor broker username
+    description: >-
+      Shared across all devices; the default is correct. Only the password
+      differs per install (and even that is shared here).
+  source_topic:
+    name: Source topic
+    description: >-
+      Where the controller publishes. {serial} and {module_id} are filled in
+      from the fields above. The default is correct.
+  mqtt_host:
+    name: Home Assistant broker host
+    description: >-
+      Leave blank to use the Mosquitto add-on automatically. Only set this to
+      point at a different broker.
+  mqtt_port:
+    name: Home Assistant broker port
+    description: Leave blank when using the Mosquitto add-on.
+  mqtt_username:
+    name: Home Assistant broker username
+    description: Leave blank to use the Mosquitto add-on's credentials.
+  mqtt_password:
+    name: Home Assistant broker password
+    description: Leave blank to use the Mosquitto add-on's credentials.
+  discovery_prefix:
+    name: Discovery prefix
+    description: >-
+      Must match the MQTT integration's setting. 'homeassistant' unless you
+      changed it.
+  retain:
+    name: Retain state
+    description: >-
+      Keep on so a restart restores the last reading immediately instead of
+      waiting for the controller's next report.
+  entity_id_charge_power:
+    name: Entity id for PV Power
+    description: >-
+      Optional. Pin the entity_id, e.g. solarinverterwatts, to match an
+      existing dashboard. Delete the old orphaned entity first.
+  entity_id_energy_today:
+    name: Entity id for Generation Today
+    description: Optional. As above, e.g. solarinverterdailywatts.
+  log_level:
+    name: Log level
+    description: Set to debug to see every raw frame in the log.
