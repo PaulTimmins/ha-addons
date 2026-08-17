@@ -113,6 +113,21 @@ class TestMosquittoDiscovery(BootstrapTestCase):
         self.assertEqual(config.homeassistant.host, "192.0.2.50")
         self.assertEqual(config.homeassistant.username, "me")
 
+    def test_mosquitto_host_without_credentials_fails_early(self):
+        """Anonymous to core-mosquitto is always refused; say so up front
+        rather than looping on 'not authorised'."""
+        with self.assertRaises(SystemExit) as ctx:
+            self.render({"mqtt_host": "core-mosquitto"}, service={})
+        message = str(ctx.exception)
+        self.assertIn("mqtt_username", message)
+        self.assertIn("Settings -> People", message)
+
+    def test_custom_host_without_credentials_is_only_a_warning(self):
+        """A broker the user named may genuinely allow anonymous."""
+        _, config = self.render({"mqtt_host": "192.0.2.99"}, service={})
+        self.assertEqual(config.homeassistant.host, "192.0.2.99")
+        self.assertIsNone(config.homeassistant.username)
+
     def test_no_broker_at_all_is_a_clear_error(self):
         with self.assertRaises(SystemExit) as ctx:
             self.render(service={})
@@ -240,6 +255,36 @@ class TestDiscoverMqtt(unittest.TestCase):
     def test_legacy_token_env_var_is_accepted(self):
         os.environ["HASSIO_TOKEN"] = "legacy-token"
         self.assertEqual(addon_bootstrap._supervisor_token(), "legacy-token")
+
+    def test_any_token_variable_is_used_as_a_fallback(self):
+        """This Supervisor injects neither known name; do not just give up."""
+        os.environ["APP_TOKEN"] = "renamed-token"
+        self.addCleanup(os.environ.pop, "APP_TOKEN", None)
+        result, out = self.capture(addon_bootstrap._supervisor_token)
+        self.assertEqual(result, "renamed-token")
+        self.assertIn("APP_TOKEN", out)
+
+    def test_unrelated_tokens_are_not_harvested(self):
+        """The fallback must not ship someone else's secret to an HTTP endpoint."""
+        os.environ["CLAUDE_CODE_MESSAGING_TOKEN"] = "not-ours"
+        os.environ["GITHUB_TOKEN"] = "also-not-ours"
+        self.addCleanup(os.environ.pop, "CLAUDE_CODE_MESSAGING_TOKEN", None)
+        self.addCleanup(os.environ.pop, "GITHUB_TOKEN", None)
+        self.assertEqual(addon_bootstrap._supervisor_token(), "")
+
+    def test_known_names_beat_the_generic_fallback(self):
+        os.environ["SUPERVISOR_TOKEN"] = "official"
+        os.environ["SOME_OTHER_TOKEN"] = "decoy"
+        self.addCleanup(os.environ.pop, "SOME_OTHER_TOKEN", None)
+        self.assertEqual(addon_bootstrap._supervisor_token(), "official")
+
+    def test_missing_token_reports_the_environment(self):
+        """Names only, never values -- so the cause is diagnosable from a log."""
+        os.environ["EXAMPLE_MARKER"] = "x"
+        self.addCleanup(os.environ.pop, "EXAMPLE_MARKER", None)
+        _, out = self.capture(addon_bootstrap.discover_mqtt)
+        self.assertIn("EXAMPLE_MARKER", out)
+        self.assertNotIn("=x", out)
 
     def test_current_token_env_var_wins(self):
         os.environ["HASSIO_TOKEN"] = "legacy"

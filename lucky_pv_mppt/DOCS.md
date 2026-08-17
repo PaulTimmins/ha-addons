@@ -39,10 +39,14 @@ this hardware, shared across every device on the service:
 - **`device_serial`** — the hex string unique to your unit (see below).
 - **`source_password`** — the vendor broker password (see below).
 
-Leave the rest as-is unless the vendor changes something. The
-`mqtt_*` fields in particular should stay blank: the add-on pulls your
-Mosquitto host and credentials from the Supervisor automatically. Every field
-has help text under it in the UI.
+Leave the rest as-is unless the vendor changes something. Every field has help
+text under it in the UI.
+
+The `mqtt_*` fields can usually stay blank — the add-on asks the Supervisor for
+your Mosquitto details. **On some Supervisor versions that lookup is not
+available** (the log says "no Supervisor token in the environment"), in which
+case fill them in by hand; see Troubleshooting. Setting them is fully
+supported, not a workaround.
 
 ### Finding your device serial
 
@@ -88,7 +92,7 @@ monthly and yearly figures from it on its own.
 | PV Voltage | V | |
 | Battery Voltage | V | |
 | Charge Current | A | |
-| Temperature | °C | Tentative — see the project README. |
+| Temperature | °C | Controller temperature. Confirmed against overnight data. |
 | Generation Today | kWh | Resets at midnight. |
 | Generation Total | kWh | Lifetime. Use this for the Energy dashboard. |
 
@@ -135,8 +139,24 @@ and that `discovery_prefix` matches its setting. The log will show
 **Entities appear but stay unknown.** Discovery worked but no frame has arrived
 yet. Overnight this is normal. Set `log_level: debug` to see raw frames.
 
-**"no MQTT broker" on startup.** The Supervisor did not return Mosquitto
-details. Install the Mosquitto broker add-on, or fill in `mqtt_host` manually.
+**"no Supervisor token in the environment".** Some Supervisor versions do not
+inject a token into add-ons, so the broker cannot be detected automatically.
+This is not fatal — set the broker by hand on the Configuration tab:
+
+```
+mqtt_host     = core-mosquitto
+mqtt_port     = 1883
+mqtt_username = a Home Assistant username
+mqtt_password = that user's password
+```
+
+The Mosquitto add-on authenticates against Home Assistant user accounts. To
+avoid reusing your own login, create a dedicated one under **Settings → People
+→ Add person** with *Allow person to login* enabled.
+
+**"HA broker refused connection: not authorised" (rc=5).** The broker rejected
+the credentials. Usually they are blank: `core-mosquitto` never allows
+anonymous connections. Fill in `mqtt_username` and `mqtt_password` as above.
 
 **Energy dashboard will not accept the sensor.** It only offers entities with
 `device_class: energy` and `state_class: total_increasing`. Pick **Generation

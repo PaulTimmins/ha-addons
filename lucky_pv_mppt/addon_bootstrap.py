@@ -54,8 +54,11 @@ def discover_mqtt(token: str = None) -> dict:
     if not token:
         print(
             "warning: no Supervisor token in the environment (looked for "
-            f"{', '.join(TOKEN_ENV_VARS)}); cannot ask for Mosquitto details"
+            f"{', '.join(TOKEN_ENV_VARS)}, and any *TOKEN* variable). "
+            "Auto-detection of your MQTT broker is not available on this "
+            "Supervisor; set mqtt_username and mqtt_password by hand."
         )
+        print(f"note: environment variables present: {_env_diagnostics()}")
         return {}
 
     # Newer Supervisors want X-Supervisor-Token; older ones take an
@@ -102,12 +105,67 @@ def discover_mqtt(token: str = None) -> dict:
 
 
 def _supervisor_token() -> str:
-    """The token env var has been renamed across Supervisor versions."""
+    """Find the Supervisor token, whatever this version chose to call it.
+
+    The variable has been HASSIO_TOKEN and SUPERVISOR_TOKEN historically, and a
+    Supervisor that calls add-ons "apps" may well use a third name. Rather than
+    keep guessing, fall back to any environment variable that looks like a
+    token and say which one was used.
+    """
     for name in TOKEN_ENV_VARS:
         value = os.environ.get(name)
         if value:
             return value
+
+    # Deliberately narrow. Matching every *TOKEN* variable would send an
+    # unrelated credential that happens to be in the environment to an HTTP
+    # endpoint, so require the name to look like it belongs to the Supervisor.
+    candidates = sorted(
+        name
+        for name, value in os.environ.items()
+        if value
+        and name.upper().endswith("TOKEN")
+        and any(
+            marker in name.upper()
+            for marker in ("SUPERVISOR", "HASSIO", "ADDON", "HOMEASSISTANT", "APP")
+        )
+    )
+    if candidates:
+        chosen = candidates[0]
+        print(
+            f"note: using the token from {chosen} "
+            f"(expected one of {', '.join(TOKEN_ENV_VARS)})."
+        )
+        return os.environ[chosen]
     return ""
+
+
+def _env_diagnostics() -> str:
+    """Names only -- never values -- of what the Supervisor did inject."""
+    names = sorted(os.environ)
+    return ", ".join(names) if names else "(empty environment)"
+
+
+def _manual_broker_help(problem: str) -> str:
+    """The whole fix, spelled out. Shown whenever the broker cannot be reached."""
+    return (
+        f"error: {problem}.\n"
+        "\n"
+        "  Set these on the add-on's Configuration tab:\n"
+        f"    mqtt_host     = {MOSQUITTO_INTERNAL_HOST}   "
+        "(the Mosquitto add-on; otherwise your broker's IP)\n"
+        "    mqtt_port     = 1883\n"
+        "    mqtt_username = a Home Assistant username\n"
+        "    mqtt_password = that user's password\n"
+        "\n"
+        "  The Mosquitto add-on authenticates against Home Assistant user\n"
+        "  accounts. If you would rather not reuse your own login, create a\n"
+        "  dedicated one under Settings -> People -> Add person, with 'Allow\n"
+        "  person to login' enabled, and use those credentials here.\n"
+        "\n"
+        "  Auto-detection is only a convenience; setting these by hand is\n"
+        "  fully supported and nothing else depends on it."
+    )
 
 
 def _ini_escape(value: str) -> str:
@@ -138,16 +196,25 @@ def build_config(options: dict, mqtt_service: dict) -> str:
     ).strip() or mqtt_service.get("password", "")
 
     if not mqtt_host:
-        sys.exit(
-            "error: could not determine your MQTT broker automatically "
-            "(see the warning above for why).\n"
-            "  Fix it by filling these in on the add-on's Configuration tab:\n"
-            f"    mqtt_host     = {MOSQUITTO_INTERNAL_HOST}   "
-            "(if you use the Mosquitto add-on; otherwise your broker's IP)\n"
-            "    mqtt_port     = 1883\n"
-            "    mqtt_username = a Home Assistant user, or a Mosquitto login\n"
-            "    mqtt_password = that user's password\n"
-            "  Auto-detection is a convenience; setting these works just as well."
+        sys.exit(_manual_broker_help("could not determine your MQTT broker"))
+
+    # A host with no credentials produces an anonymous connect. The Mosquitto
+    # add-on always refuses that, so fail here where the message can be useful
+    # rather than in an endless reconnect loop. A broker the user named
+    # themselves may genuinely allow anonymous, so only warn in that case.
+    if not mqtt_user and not mqtt_pass:
+        if mqtt_host == MOSQUITTO_INTERNAL_HOST:
+            sys.exit(
+                _manual_broker_help(
+                    f"MQTT host is {mqtt_host} but no username or password is "
+                    "available, and the Mosquitto add-on refuses anonymous "
+                    "connections"
+                )
+            )
+        print(
+            f"warning: connecting to {mqtt_host} with no credentials. If it "
+            "refuses with 'not authorised', set mqtt_username and "
+            "mqtt_password."
         )
 
     lines = [

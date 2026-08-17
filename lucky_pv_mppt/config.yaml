@@ -6,7 +6,7 @@
 # rendered into a config.ini at startup.
 
 name: Lucky PV MPPT Device
-version: "1.0.4"
+version: "1.0.5"
 slug: lucky_pv_mppt
 description: >-
   Bridges a JGY / inverteriot MPPT solar charge controller into Home Assistant
